@@ -38,18 +38,155 @@ function Brand() {
   return <span className="brand"><span className="brand-mark"><Icon name="book" size={22}/></span><span><span>SAT</span></span></span>
 }
 
+function getPaginationRange(current, total) {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1)
+  }
+  if (current <= 4) {
+    return [1, 2, 3, 4, 5, '...', total]
+  }
+  if (current >= total - 3) {
+    return [1, '...', total - 4, total - 3, total - 2, total - 1, total]
+  }
+  return [1, '...', current - 1, current, current + 1, '...', total]
+}
+
 function TestLibrary({ tests, onStart }) {
   const [query, setQuery] = useState('')
   const [subject, setSubject] = useState('Tất cả')
-  const filtered = useMemo(() => tests.filter((test) => test.test_name.toLowerCase().includes(query.toLowerCase()) && (subject === 'Tất cả' || getSubject(test) === subject)), [tests, query, subject])
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(24)
+
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase().trim()
+    return tests.filter((test) => {
+      const matchesQuery = !q || test.test_name.toLowerCase().includes(q)
+      const matchesSubject = subject === 'Tất cả' || getSubject(test) === subject
+      return matchesQuery && matchesSubject
+    })
+  }, [tests, query, subject])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const currentPage = Math.min(Math.max(1, page), totalPages)
+  const startIndex = (currentPage - 1) * pageSize
+  const endIndex = Math.min(startIndex + pageSize, filtered.length)
+  const currentTests = useMemo(() => filtered.slice(startIndex, endIndex), [filtered, startIndex, endIndex])
+
+  const goToPage = (newPage) => {
+    const target = Math.min(Math.max(1, newPage), totalPages)
+    setPage(target)
+    const catalogEl = document.getElementById('catalog')
+    if (catalogEl) {
+      catalogEl.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+
+  const handleQueryChange = (e) => {
+    setQuery(e.target.value)
+    setPage(1)
+  }
+
+  const handleSubjectChange = (item) => {
+    setSubject(item)
+    setPage(1)
+  }
+
+  const handlePageSizeChange = (e) => {
+    setPageSize(Number(e.target.value))
+    setPage(1)
+  }
+
+  const pageNumbers = useMemo(() => getPaginationRange(currentPage, totalPages), [currentPage, totalPages])
+
   return <div className="library-shell">
     <header className="site-header"><Brand/><nav><a className="active" href="#tests">Kho đề</a><a href="#guide">Hướng dẫn</a></nav><div className="header-stat"><b>{tests.length}</b><span>đề luyện tập</span></div></header>
     <main className="library-main" id="tests">
       <section className="library-hero"><div><span className="eyebrow">LUYỆN TẬP CÓ CHỦ ĐÍCH</span><h1>Mỗi câu đúng là một bước<br/>gần hơn tới mục tiêu.</h1><p>Chọn một đề, luyện tập trong giao diện mô phỏng Digital SAT và xem kết quả ngay sau khi hoàn thành.</p></div><div className="hero-orbit" aria-hidden="true"><div className="orbit one"/><div className="orbit two"/><div className="hero-score"><small>YOUR GOAL</small><strong>1500<span>+</span></strong><i>KEEP GOING</i></div></div></section>
-      <section className="catalog"><div className="catalog-title"><div><span className="section-kicker">KHO ĐỀ LUYỆN TẬP</span><h2>Chọn bài để bắt đầu</h2></div><span className="result-count">{filtered.length} đề</span></div>
-        <div className="filters"><label className="search-box"><Icon name="search" size={19}/><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Tìm theo tên đề..."/></label><div className="filter-tabs">{['Tất cả','Toán','Đọc & Viết','Tổng hợp'].map((item) => <button key={item} className={subject === item ? 'active' : ''} onClick={() => setSubject(item)}>{item}</button>)}</div></div>
-        <div className="test-grid">{filtered.slice(0,60).map((test,index) => <article className="test-card" key={`${test.test_name}-${index}`}><div className={`test-card-icon ${getSubject(test)==='Toán'?'math':''}`}>{getSubject(test)==='Toán'?'ƒx':'Aa'}</div><div className="test-card-copy"><span>{getSubject(test)}</span><h3>{test.test_name}</h3><div className="test-meta"><span><Icon name="grid" size={15}/>{test.questions.length} câu</span><span><Icon name="clock" size={15}/>{getMinutes(test)} phút</span></div></div><button className="start-button" onClick={() => onStart(test)} aria-label={`Làm đề ${test.test_name}`}><Icon name="arrow"/></button></article>)}</div>
-        {filtered.length > 60 && <p className="more-note">Tìm theo tên để xem các đề còn lại.</p>}{!filtered.length && <div className="empty-state">Không tìm thấy đề phù hợp. Thử một từ khóa khác nhé.</div>}
+      <section className="catalog" id="catalog"><div className="catalog-title"><div><span className="section-kicker">KHO ĐỀ LUYỆN TẬP</span><h2>Chọn bài để bắt đầu</h2></div><span className="result-count">{filtered.length} đề</span></div>
+        <div className="filters">
+          <label className="search-box">
+            <Icon name="search" size={19}/>
+            <input value={query} onChange={handleQueryChange} placeholder="Tìm theo tên đề..."/>
+            {query && (
+              <button
+                type="button"
+                className="search-clear"
+                onClick={() => { setQuery(''); setPage(1); }}
+                aria-label="Xóa tìm kiếm"
+              >
+                <Icon name="x" size={14} />
+              </button>
+            )}
+          </label>
+          <div className="filter-tabs">{['Tất cả','Toán','Đọc & Viết','Tổng hợp'].map((item) => <button key={item} className={subject === item ? 'active' : ''} onClick={() => handleSubjectChange(item)}>{item}</button>)}</div>
+        </div>
+        <div className="test-grid">
+          {currentTests.map((test,index) => <article className="test-card" key={`${test.test_name}-${startIndex + index}`}><div className={`test-card-icon ${getSubject(test)==='Toán'?'math':''}`}>{getSubject(test)==='Toán'?'ƒx':'Aa'}</div><div className="test-card-copy"><span>{getSubject(test)}</span><h3>{test.test_name}</h3><div className="test-meta"><span><Icon name="grid" size={15}/>{test.questions.length} câu</span><span><Icon name="clock" size={15}/>{getMinutes(test)} phút</span></div></div><button className="start-button" onClick={() => onStart(test)} aria-label={`Làm đề ${test.test_name}`}><Icon name="arrow"/></button></article>)}
+        </div>
+        {!filtered.length && <div className="empty-state">Không tìm thấy đề phù hợp. Thử một từ khóa khác nhé.</div>}
+        {filtered.length > 0 && (
+          <div className="pagination-wrapper">
+            <div className="pagination-info">
+              Hiển thị <b>{startIndex + 1}–{endIndex}</b> trong <b>{filtered.length}</b> đề
+            </div>
+
+            {totalPages > 1 && (
+              <nav className="pagination-nav" aria-label="Phân trang danh sách đề">
+                <button
+                  type="button"
+                  className="pagination-btn nav-btn"
+                  disabled={currentPage === 1}
+                  onClick={() => goToPage(currentPage - 1)}
+                  title="Trang trước"
+                >
+                  <Icon name="chevronLeft" size={16} />
+                  <span className="btn-label">Trước</span>
+                </button>
+                <div className="pagination-pages">
+                  {pageNumbers.map((p, idx) =>
+                    p === '...' ? (
+                      <span key={`ellipsis-${idx}`} className="pagination-ellipsis">…</span>
+                    ) : (
+                      <button
+                        key={p}
+                        type="button"
+                        className={`pagination-btn page-num ${currentPage === p ? 'active' : ''}`}
+                        onClick={() => goToPage(p)}
+                        aria-current={currentPage === p ? 'page' : undefined}
+                      >
+                        {p}
+                      </button>
+                    )
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="pagination-btn nav-btn"
+                  disabled={currentPage === totalPages}
+                  onClick={() => goToPage(currentPage + 1)}
+                  title="Trang sau"
+                >
+                  <span className="btn-label">Sau</span>
+                  <Icon name="chevronRight" size={16} />
+                </button>
+              </nav>
+            )}
+
+            <div className="pagination-size">
+              <span>Hiển thị:</span>
+              <select
+                value={pageSize}
+                onChange={handlePageSizeChange}
+                aria-label="Số đề mỗi trang"
+              >
+                <option value={12}>12 đề / trang</option>
+                <option value={24}>24 đề / trang</option>
+                <option value={48}>48 đề / trang</option>
+                <option value={96}>96 đề / trang</option>
+              </select>
+            </div>
+          </div>
+        )}
       </section>
     </main><footer><span>SAT</span><p>Học thông minh. Tiến bộ mỗi ngày.</p></footer>
   </div>
